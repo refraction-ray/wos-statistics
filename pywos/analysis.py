@@ -3,22 +3,62 @@ analysis the data with the special focus on the citation evaluation
 """
 import pandas as pd
 import json
+import re
+from os import listdir, remove
+from os.path import isfile, join
 from pywos.cons import logger
 
-class Papers:
-    def __init__(self, path):
-        self.papers = []
-        if isinstance(path, str):
-            with open(path, "r") as file:
-                self.papers = json.load(file)
-        elif isinstance(path, list) or isinstance(path, tuple):
-            for eachpath in path:
-                with open(eachpath,"r") as file:
-                    self.papers.append( json.load(file) )
 
-    def export(self, path):
+
+class Papers:
+    def __init__(self, path, merge=False):
+        self.papers = []
+        self.loadfile = []
+        if merge is False:
+            if isinstance(path, str):
+                with open(path, "r") as file:
+                    self.papers = json.load(file)
+                logger.info("load data from %s"%path)
+                self.loadfile.append(path)
+            elif isinstance(path, list) or isinstance(path, tuple):
+                for eachpath in path:
+                    with open(eachpath, "r") as file:
+                        self.papers.append(json.load(file))
+                    logger.info("load data from %s" %eachpath)
+                    self.loadfile.append(eachpath)
+
+        else:
+            if isinstance(path, str):
+                self.load_from_prefix(path)
+            elif isinstance(path, list) or isinstance(path, tuple):
+                for eachpath in path:
+                    self.load_from_prefix(eachpath)
+
+    def load_from_prefix(self, path):
+        try:
+            a = re.match(r"(^.*/)([^/]*$)", path)
+            dirpath = a.group(1)
+            namepath = a.group(2)
+        except AttributeError:
+            dirpath = "./"
+            namepath = path
+        files = [f for f in listdir(dirpath) if isfile(join(dirpath, f))]
+        patten = re.compile(namepath + r"-" + r".*")
+        for file in files:
+            if patten.match(file):
+                with open(file, "r") as f:
+                    self.papers.append(json.load(f))
+                logger.info("load data from %s" % file)
+                self.loadfile.append(join(dirpath,file))
+
+
+    def export(self, path, clear=False):
         with open(path, "w") as file:
             json.dump(file, self.papers)
+        logger.info("save all data in one file %s"%path)
+        logger.warning("the input files would be deleted now!")
+        for f in self.loadfile:
+            remove(f)
 
     def mailauthor(self, maillist):
         for i, p in enumerate(self.papers):
@@ -94,6 +134,17 @@ class Papers:
             self.papers[i]['cited_count_recent'] = (scr, ocr)
 
     def show(self, namelist, maillist, years=None, citedcheck=False):
+        '''
+        show the data on citations as a pandas dataframe, which is easy to be saved as other formats like csv
+
+        :param namelist: list of strings, for the name of the author, be consitent with the form in metadata!
+                    eg. ["last, first", "last, f."]
+        :param maillist: list of strings, the email address of the author
+        :param years: list of strings, the years considered as recent, eg. ['2016','2017','2018']
+        :param citedcheck: bool, if true, check details of citations by year and by author,
+                        need citedcheck be true in crawling process
+        :return: pandas.DataFrame
+        '''
         self.mailauthor(maillist)
         self.firstauthor(namelist)
         if citedcheck:
@@ -111,14 +162,42 @@ class Papers:
             show_dict['highlycited'] = p['highlycited']
             show_dict['hotpapers'] = p['hotpapers']
             show_dict['firstauthor'] = p.get('firstauthor', "unknown")
-            show_dict['mailautor'] = p.get('mailauthor', "unknown")
+            show_dict['mailauthor'] = p.get('mailauthor', "unknown")
             if citedcheck:
-                show_dict['citation_by_others'] = p.get('cited_count_total', (0,0))[1]
-                show_dict['citation_by_self'] =  p.get('cited_count_total', (0,0))[0]
-                show_dict['recent_citation_by_others'] = p.get('cited_count_recent',(0,0))[1]
-                show_dict['recent_citation_by_self'] = p.get('cited_count_recent',(0,0))[0]
-            else:
-                show_dict['total_citation'] = p['cited_num']
+                show_dict['citation_by_others'] = p.get('cited_count_total', (0, 0))[1]
+                show_dict['citation_by_self'] = p.get('cited_count_total', (0, 0))[0]
+                show_dict['recent_citation_by_others'] = p.get('cited_count_recent', (0, 0))[1]
+                show_dict['recent_citation_by_self'] = p.get('cited_count_recent', (0, 0))[0]
+
+            show_dict['total_citation'] = p['cited_num']
             show_list.append(show_dict)
-        df = pd.DataFrame(show_list)
+        ## total line
+        show_dict = {}
+        show_dict['title'] = None
+        show_dict['journal'] = None
+        show_dict['date'] = 'Total'
+        show_dict['volume'] = None
+        show_dict['number'] = None
+        show_dict['highlycited'] = sum([p['highlycited'] for p in show_list])
+        show_dict['hotpapers'] = sum([p['hotpapers'] for p in show_list])
+        show_dict['firstauthor'] = sum(p['firstauthor'] for p in show_list if isinstance(p['firstauthor'], bool))
+        show_dict['mailauthor'] = sum(p['mailauthor'] for p in show_list if isinstance(p['mailauthor'], bool))
+        if citedcheck:
+            show_dict['citation_by_others'] = sum([p['citation_by_others'] for p in show_list])
+            show_dict['citation_by_self'] = sum([p['citation_by_self'] for p in show_list])
+            show_dict['recent_citation_by_others'] = sum([p['recent_citation_by_others'] for p in show_list])
+            show_dict['recent_citation_by_self'] = sum([p['recent_citation_by_self'] for p in show_list])
+
+        show_dict['total_citation'] = sum([p['total_citation'] for p in show_list])
+        show_list.append(show_dict)
+        if citedcheck:
+            df = pd.DataFrame(show_list, columns=['date', 'journal', 'volume', 'number', 'firstauthor',
+                                                  'mailauthor', 'total_citation', 'highlycited', 'hotpapers',
+                                                  'recent_citation_by_others', 'recent_citation_by_self',
+                                                  'citation_by_others', 'citation_by_self', 'title'])
+        else:
+            df = pd.DataFrame(show_list, columns=['date', 'journal', 'volume', 'number', 'firstauthor',
+                                                  'mailauthor', 'total_citation', 'highlycited', 'hotpapers',
+                                                 'title'])
+        df.sort_values(['date'])
         return df
