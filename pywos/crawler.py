@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 import json
 from pywos.cons import wosException
 from pywos.cons import logger
-from pywos.cons import urls
+from pywos.cons import urls, http_error
 
 
 def construct_search(**query):
@@ -68,7 +68,7 @@ class WosQuery:
         find the urlprefix for each paper satisifying the query, as well as the total number
         of papers, the two value are assigned with self.urlprefix and self.num_items
         '''
-
+        logger.info("trying to get sid and open new session, it may takes several seconds...")
         async with aiohttp.ClientSession(headers=self.headers) as session:
             async with session.get(urls['indexurl']) as response:
                 r = response
@@ -112,7 +112,7 @@ class WosQuery:
                 masklist = []
             self.papers = await asyncio.gather(
                 *[self.parse_paper(session, self.urlprefix, count + 1, citedcheck=citedcheck,
-                                   savebyeach=savebyeach, savepath=savepathprefix + "-" + str(count + 1)+".json")
+                                   savebyeach=savebyeach, savepath=savepathprefix + "-" + str(count + 1) + ".json")
                   for count in range(self.num_items) if count + 1 not in masklist])
 
     async def parse_paper(self, session, prefix, count, citedcheck=False,
@@ -131,20 +131,40 @@ class WosQuery:
         :return: the parse_dict dictionary containing all metadata of the paper
         '''
         html2 = ""
-        async with session.get(prefix + str(count)) as r:
-            html2 = await r.text()
-            if ocount == 0:
-                logger.info("download paper %s in query" % count)
-            else:
-                logger.info("download cited paper no %s of %s paper" % (count, ocount))
+        for tries in range(3):
+            try:
+                async with session.get(prefix + str(count)) as r:
+                    html2 = await r.text()
+                    break
+            except http_error as e:
+                if tries < 2:
+                    pass
+                else:
+                    logger.warning("tried connection 3 times, all failed")
+                    raise e
+
+        if ocount == 0:
+            logger.info("download paper %s in query" % count)
+        else:
+            logger.info("download cited paper no %s of %s paper" % (count, ocount))
         so2 = BeautifulSoup(html2, "lxml")
         parse_dict = parse_record(so2)
 
         if parse_dict.get('cited_link', None) and citedcheck:
             logger.info("try fetch cited paper of %s" % count)
             html3 = ""
-            async with session.get(parse_dict['cited_link']) as r:
-                html3 = await r.text()
+            for tries in range(3):
+                try:
+                    async with session.get(parse_dict['cited_link']) as r:
+                        html3 = await r.text()
+                        break
+                except http_error as e:
+                    if tries < 2:
+                        pass
+                    else:
+                        logger.warning("tried connection 3 times, all failed")
+                        raise e
+
             so3 = BeautifulSoup(html3, 'lxml')
             contenturl = so3("a", class_="smallV110 snowplow-full-record")[0].get("href")
             qid = re.match(r".*&qid=([0-9]+)&.*", contenturl).group(1)
@@ -159,7 +179,7 @@ class WosQuery:
         if savebyeach and isinstance(savepath, str):
             with open(savepath, "w") as output:
                 json.dump(parse_dict, output)
-            logger.info("save the data of paper %s on %s"%(count, savepath))
+            logger.info("save the data of paper %s on %s" % (count, savepath))
 
         return parse_dict
 

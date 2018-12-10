@@ -1,6 +1,8 @@
 """
 some consts
 """
+import aiohttp
+import asyncio
 import logging
 logger = logging.getLogger('pywos')
 
@@ -15,3 +17,6 @@ urls = {
     "recordurl": "https://apps.webofknowledge.com/full_record.do?product=UA&search_mode=GeneralSearch&qid=",
     "citationrecordurl": "https://apps.webofknowledge.com/full_record.do?product=WOS&search_mode=CitingArticles&qid="
         }
+
+http_error = (aiohttp.ClientOSError, asyncio.TimeoutError, aiohttp.client_exceptions.ServerDisconnectedError,
+                 aiohttp.client_exceptions.ClientConnectorError)

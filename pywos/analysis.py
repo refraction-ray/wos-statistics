@@ -9,22 +9,29 @@ from os.path import isfile, join
 from pywos.cons import logger
 
 
-
 class Papers:
+    '''
+    class to load data from file and analyzing citation statistics
+
+    :param path: string or list of string, file path to load
+    :param merge: bool, if set true, all path should be taken as the prefix before -,
+                and all files with name starting with path-(num) would be loaded
+    '''
     def __init__(self, path, merge=False):
         self.papers = []
         self.loadfile = []
+        self.path = path
         if merge is False:
             if isinstance(path, str):
                 with open(path, "r") as file:
                     self.papers = json.load(file)
-                logger.info("load data from %s"%path)
+                logger.info("load data from %s" % path)
                 self.loadfile.append(path)
             elif isinstance(path, list) or isinstance(path, tuple):
                 for eachpath in path:
                     with open(eachpath, "r") as file:
                         self.papers.append(json.load(file))
-                    logger.info("load data from %s" %eachpath)
+                    logger.info("load data from %s" % eachpath)
                     self.loadfile.append(eachpath)
 
         else:
@@ -42,6 +49,7 @@ class Papers:
         except AttributeError:
             dirpath = "./"
             namepath = path
+        self.namepath = namepath
         files = [f for f in listdir(dirpath) if isfile(join(dirpath, f))]
         patten = re.compile(namepath + r"-" + r".*")
         for file in files:
@@ -49,16 +57,31 @@ class Papers:
                 with open(file, "r") as f:
                     self.papers.append(json.load(f))
                 logger.info("load data from %s" % file)
-                self.loadfile.append(join(dirpath,file))
-
+                self.loadfile.append(join(dirpath, file))
 
     def export(self, path, clear=False):
+        '''
+        export dict data into one json file
+
+        :param path: string, path of output json file
+        :param clear: bool, default false, the true option is dangerous unless you know what you are doing!
+                    if set to true, all files loaded for this object would be deleted!
+        '''
         with open(path, "w") as file:
             json.dump(file, self.papers)
-        logger.info("save all data in one file %s"%path)
+        logger.info("save all data in one file %s" % path)
         logger.warning("the input files would be deleted now!")
         for f in self.loadfile:
             remove(f)
+
+    def generate_masklist(self, suffix):
+        if isinstance(self.path, str):
+            masklist = []
+            patten = re.compile("^.*/"+self.namepath+"-"+"([0-9]*)"+suffix)
+            for f in self.loadfile:
+                masklist.append(int(patten.match(f).group(1)))
+            return masklist
+
 
     def mailauthor(self, maillist):
         for i, p in enumerate(self.papers):
@@ -198,6 +221,6 @@ class Papers:
         else:
             df = pd.DataFrame(show_list, columns=['date', 'journal', 'volume', 'number', 'firstauthor',
                                                   'mailauthor', 'total_citation', 'highlycited', 'hotpapers',
-                                                 'title'])
+                                                  'title'])
         df.sort_values(['date'])
         return df
