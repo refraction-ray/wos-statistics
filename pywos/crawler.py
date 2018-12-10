@@ -199,7 +199,7 @@ class WosQuery:
         await self.collect_papers(citedcheck=citedcheck, limit=limit, savebyeach=savebyeach,
                                   savepathprefix=path, masklist=masklist)
         logger.info("all download tasks are finished")
-        with open(path, "w") as output:
+        with open(path+".json", "w") as output:
             json.dump(self.papers, output)
         logger.info("total data are written into json file: %s" % path)
 

@@ -4,6 +4,10 @@ Python library for collecting data from web of science and exporting summary in 
 
 ## Installation
 
+```bash
+pip install pywos
+```
+
 Python 3.6+ is supported.
 
 ## Quick Start
@@ -17,7 +21,7 @@ import asyncio
 qd = construct_search(AI="D-3202-2011", PY="2014-2018") # construct the query for papers
 wq = WosQuery(querydict=qd) # create the crawler object based on the query
 loop = asyncio.get_event_loop()
-task = asyncio.ensure_future(wq.main(path="data.json")) # use main function of the object to download paper metadata and save them in the path
+task = asyncio.ensure_future(wq.main(path="data")) # use main function of the object to download paper metadata and save them in the path
 loop.run_until_complete(task) # here we go
 
 # analyse data
@@ -52,7 +56,7 @@ from pywos.crawler import WosQuery
 wq = WosQuery(querydict = {'value(input1)': '',...}, headers= {'User-Agent':'blah-blah'})
 ```
 
-The data collecting task is called by `WosQuery.main(path=)`. Parameters are all optional except `path`, which is the pathname to save output data. `citedcheck` is a bool, if set to be true, all citation papers of the query paper are also collected. And this is the basis for detailed analysis on citations, like citations by years and citations by others. Otherwise, the default value for `citedcheck` is false, in this case only total citation number of each query paper can be obtained. `limit` option gives the max number of connections in the http connection pool. The default number is 20. A larger number implies faster speed but also implies higher risk of connection failure due to the restriction by web of science. `limit=30` is tested successfully without connection failure, and such speed is enough to handle 1000 papers in around 1 minute. If the query task is too large, the better practice is turning on the parameter `savebyeach=True`, such that every paper within the query will be saved immediately after downloading. Therefore, when meeting connection failure, we can recover the task without fetching all data again. This is determined by the `masklist` paramter of main function. If `masklist` is provided, for all int number in this list, the corresponding paper is omitted to avoid repeating work. In sum, for a large task, we have the following parameters.
+The data collecting task is called by `WosQuery.main(path=)`. Parameters are all optional except `path`, which is the pathname to save output data (no need to write .json down). `citedcheck` is a bool, if set to be true, all citation papers of the query paper are also collected. And this is the basis for detailed analysis on citations, like citations by years and citations by others. Otherwise, the default value for `citedcheck` is false, in this case only total citation number of each query paper can be obtained. `limit` option gives the max number of connections in the http connection pool. The default number is 20. A larger number implies faster speed but also implies higher risk of connection failure due to the restriction by web of science. `limit=30` is tested successfully without connection failure, and such speed is enough to handle 1000 papers in around 1 minute. If the query task is too large, the better practice is turning on the parameter `savebyeach=True`, such that every paper within the query will be saved immediately after downloading. Therefore, when meeting connection failure, we can recover the task without fetching all data again. This is determined by the `masklist` paramter of main function. If `masklist` is provided, for all int number in this list, the corresponding paper is omitted to avoid repeating work. In sum, for a large task, we have the following parameters.
 
 ```python
 import asyncio
@@ -94,11 +98,21 @@ The `Papers()` class is designed for analysis on metadata of the papers. To init
 
 Generate the table of citation analysis by running `Papers.show(namelist, maillist, years)`. These lists are used for checking whether one is the first/correspondence author of the paper and count citations within `years` as recent citations, respectively. One can turn on `citedcheck=True` if the data to be analysed is obtained from `WosQuery.main(citedcheck=True)`. This includes further classification on citations in terms of years (recent citation) and authors (citation by others/self). The return object of `Papers.show()` is `pandas.DataFrame`, which can be easily transformed into other formats, including csv, html, tables in database and so on.
 
-In sum, 
-
 ```python
 from pywos.analysis import Papers
 p = Papers("path-prefix", merge=True)
 p.show(["Last, First"], ["mail@server"], ["2018"], citedcheck=True)
 ```
 
+If the download is interrupted, to recover the task, you need to generate the `masklist first`.
+
+```python
+p = Papers("path-prefix", merge=True)
+masklist = p.genarate_masklist(suffix='.json')
+```
+
+And to save all metadata after processing in the one file, try `export`.
+
+```python
+p.export('summary.json')
+```
