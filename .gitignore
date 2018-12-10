@@ -1,4 +1,7 @@
 develop/
+build/
+dist/
+pywos.egg-info/
 .DS_Store
 .idea/
 __pycache__/
