@@ -103,7 +103,7 @@ class Papers:
                 else:
                     self.papers[i]['firstauthor'] = False
 
-    def count_citation(self, namelist):
+    def count_citation(self, namelist=None, collab_exclude=True):
         for i, p in enumerate(self.papers):
             sc = 0
             oc = 0
@@ -114,7 +114,12 @@ class Papers:
                 for cp in p['cited_papers']:
                     if cp.get('author', None):
                         au = [a[0] for a in cp['author']]
-                        for name in namelist:
+                        comparelist = []
+                        if collab_exclude is True:
+                            comparelist = [a[0] for a in p.get('author', [(None,None)])]
+                        else:
+                            comparelist = namelist
+                        for name in comparelist:
                             if name in au:
                                 sc += 1
                                 if cp.get('date', None):
@@ -156,7 +161,7 @@ class Papers:
                 ocr = 0
             self.papers[i]['cited_count_recent'] = (scr, ocr)
 
-    def show(self, namelist, maillist, years=None, citedcheck=False):
+    def show(self, namelist, maillist, years=None, collab_exclude=True, citedcheck=False):
         '''
         show the data on citations as a pandas dataframe, which is easy to be saved as other formats like csv
 
@@ -164,6 +169,8 @@ class Papers:
                     eg. ["last, first", "last, f."]
         :param maillist: list of strings, the email address of the author
         :param years: list of strings, the years considered as recent, eg. ['2016','2017','2018']
+        :param collab_exclude: bool, control the behavior of how to count self citations,
+                            if false, only the paper of specified author is counted as citation by self
         :param citedcheck: bool, if true, check details of citations by year and by author,
                         need citedcheck be true in crawling process
         :return: pandas.DataFrame
@@ -172,7 +179,7 @@ class Papers:
         self.firstauthor(namelist)
         if citedcheck:
             logger.info("Run extra routine to classify the citations in detail")
-            self.count_citation(namelist)
+            self.count_citation(namelist, collab_exclude)
             self.count_recent_citation(years)
         show_list = []
         for p in self.papers:
